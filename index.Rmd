@@ -1,8 +1,10 @@
 ---
 title: "Practical Machine Learning"
 author: "Andrea Bruna"
-date: "18 gennaio 2017"
-output: html_document
+date: "January 18th, 2017"
+output: 
+  html_document: 
+    keep_md: yes
 ---
 
 ```{r setup, include=FALSE}
