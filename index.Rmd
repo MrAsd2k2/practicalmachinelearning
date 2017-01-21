@@ -11,22 +11,89 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+# Introduction 
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+The following project aims to predict how a population of individual performed weight lifting exercises (correctly or incorrectly) according to training data collected from retail wearable fitness trackers.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+The training and data sets are available from the following sites:
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
 
-```{r cars}
-summary(cars)
+More information are provided at the following link: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har)
+
+From the page linked above: "_Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E)._"
+
+Essentially, all but class "A" records, are related to different mistakes in the execution form of the exercise.
+
+## Initialization and Data Cleaning 
+
+First of all, the required libraries are loaded, the train and test data are downloaded directly from internet and stored as data frame. The random seed set to today's date.
+
+```{r initialize library, load data, set.seed}
+library(caret)
+library(gbm)
+library(randomForest)
+
+train <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+set.seed(18012017)
 ```
 
-## Including Plots
+A brief data analysis showed that the first seven columns contain factors which are not useful for predictions so they were removed. Furthermore I decided to exclude columns where there are even a single NA value in either the train or test data sets and values from the training sets with a variance near to zero (they would largely increase the calculation time without improving the predictive model so much).
 
-You can also embed plots, for example:
+```{r exploratory data analysis and data cleaning}
+names(train)[1:7]
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+train2 <- train[, colSums(is.na(train)) == 0 | colSums(is.na(test)) == 0 ] 
+train2 <- train2[, -c(1:7)]
+
+nzvar <- (nearZeroVar(train2, saveMetrics = TRUE))
+train2 <- train2[, (nzvar$nzv==FALSE)]
+
+
+test2 <- test[, colSums(is.na(train)) == 0 | colSums(is.na(test)) == 0]
+test2 <- test2[, -c(1:7)]
+test2 <- test2[ , (nzvar$nzv == FALSE)]
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Training data split
+
+The "clean" training set is split: 60% of the rows will be used to train the model, the remaining 40% to validate the prediction model before applying it to the test data. (Note of the Author: I am aware the training set would benefit from a larger data set, unfortunately I had to decrease the training populationdue to performance issues with my current hardware configuration...)
+
+```{r split}
+training <- train2[createDataPartition(train2$classe, p = 0.60, list = FALSE), ]
+cv <- train2[-createDataPartition(train2$classe, p = 0.40, list = FALSE), ]
+```
+
+## Training Model(s)
+
+Afterwards two prediction models are generated based on the "cleaned"" training data frame using respectively Stochastic Gradient Boosting and Random Forest with 4-folds without repetition (Note: again I had to partially sacrifice accuracy to obtain "acceptable" elaboration times...) 
+
+```{r model training }
+modfitgbm <- train(classe ~ ., data = training, method="gbm", 
+                   trControl = trainControl(method="cv", number=4), 
+                   verbose=FALSE)
+
+modfitrf <- train(classe ~ ., data = training, method="rf",
+                  trControl=trainControl(method="cv", number=4))
+```
+
+Below the confusion matrixes, respectively, for the training and cross-validation sets: 
+```{r confusionmatrix}
+confusionMatrix(predict(modfitgbm, training), training$classe)
+confusionMatrix(predict(modfitgbm, cv), cv$classe)
+
+confusionMatrix(predict(modfitrf, training), training$classe)
+confusionMatrix(predict(modfitrf, cv), cv$classe)
+```
+
+With the latest versions of the above mentioned R libraries, Random Forest provides more accurate results.
+
+## Prediction
+
+Applying the Random Forest model to the test data:
+```{r training and crossvalidation }
+predict(modfitrf, test2)
+table(predict(modfitrf, test2))
+```
