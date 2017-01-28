@@ -39,7 +39,7 @@ test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testin
 set.seed(18012017)
 ```
 
-A brief data analysis showed that the first seven columns contain factors which are not useful for predictions so they were removed. Furthermore I decided to exclude columns where there are even a single NA value in either the train or test data sets and values from the training sets with a variance near to zero (they would largely increase the calculation time without improving the predictive model so much).
+A brief data analysis showed that the first seven columns contain factors which are not useful for predictions so they were removed. Furthermore I decided to exclude columns where there are even a single NA value in either the train or test data sets and values from the training sets with a variance near to zero (they would not improve the model).
 
 ```{r exploratory data analysis and data cleaning}
 names(train)[1:7]
@@ -57,42 +57,42 @@ test2 <- test2[ , (nzvar$nzv == FALSE)]
 
 ```
 
-## Training data split
+## Splitting training data
 
-The "clean" training set is split: 60% of the rows will be used to train the model, the remaining 40% to validate the prediction model before applying it to the test data. (Note of the Author: I am aware the training set would benefit from a larger data set, unfortunately I had to decrease the training populationdue to performance issues with my current hardware configuration...)
+The "clean" training set is split: 60% of the rows will be used to train the model, the remaining 40% to validate and estimate the error rate of the prediction model before applying it to the test data. 
 
 ```{r split}
-training <- train2[createDataPartition(train2$classe, p = 0.60, list = FALSE), ]
-cv <- train2[-createDataPartition(train2$classe, p = 0.40, list = FALSE), ]
+partition <- createDataPartition(train2$classe, p = 0.60, list = FALSE)
+training <- train2[partition, ]
+cv <- train2[-partition, ]
 ```
 
 ## Training Model(s)
 
-Afterwards two prediction models are generated based on the "cleaned"" training data frame using respectively Stochastic Gradient Boosting and Random Forest with 4-folds without repetition (Note: again I had to partially sacrifice accuracy to obtain "acceptable" elaboration times...) 
+Afterwards two prediction models are generated based on the "cleaned"" training data frame using respectively Stochastic Gradient Boosting and Random Forest.
 
 ```{r model training }
 modfitgbm <- train(classe ~ ., data = training, method="gbm", 
-                   trControl = trainControl(method="cv", number=4), 
+                   trControl = trainControl(method="repeatedcv", repeats=3, number=4), 
                    verbose=FALSE)
 
 modfitrf <- train(classe ~ ., data = training, method="rf",
-                  trControl=trainControl(method="cv", number=4))
+                  trControl=trainControl(method="repeatedcv", repeats=3, number=4))
 ```
 
-Below the confusion matrixes, respectively, for the training and cross-validation sets: 
-```{r confusionmatrix}
-confusionMatrix(predict(modfitgbm, training), training$classe)
-confusionMatrix(predict(modfitgbm, cv), cv$classe)
+## Extimation of o.o.s. error rate
 
-confusionMatrix(predict(modfitrf, training), training$classe)
+Let's quantify the accuracy of the prediction using the cv set respectively for GBM and RF: 
+```{r confusionmatrix}
+confusionMatrix(predict(modfitgbm, cv), cv$classe)
 confusionMatrix(predict(modfitrf, cv), cv$classe)
 ```
 
-With the latest versions of the above mentioned R libraries, Random Forest provides more accurate results.
+The accuracy of the two models is quite close however Random Forest provides even more accurate predictions. The accuracy rate is close to 99.12% therefore I expect the out of sample error rate to be around 0.9% and the predictions to be fairly accurate even using the test data.
 
-## Prediction
+## Predicted values
 
-Applying the Random Forest model to the test data:
+Applying the Random Forest model to the test data, we obtain the following predicted values for "classe":
 ```{r training and crossvalidation }
 predict(modfitrf, test2)
 table(predict(modfitrf, test2))

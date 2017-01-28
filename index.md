@@ -95,7 +95,7 @@ test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testin
 set.seed(18012017)
 ```
 
-A brief data analysis showed that the first seven columns contain factors which are not useful for predictions so they were removed. Furthermore I decided to exclude columns where there are even a single NA value in either the train or test data sets and values from the training sets with a variance near to zero (they would largely increase the calculation time without improving the predictive model so much).
+A brief data analysis showed that the first seven columns contain factors which are not useful for predictions so they were removed. Furthermore I decided to exclude columns where there are even a single NA value in either the train or test data sets and values from the training sets with a variance near to zero (they would not improve the model).
 
 
 ```r
@@ -121,24 +121,25 @@ test2 <- test2[, -c(1:7)]
 test2 <- test2[ , (nzvar$nzv == FALSE)]
 ```
 
-## Training data split
+## Splitting training data
 
-The "clean" training set is split: 60% of the rows will be used to train the model, the remaining 40% to validate the prediction model before applying it to the test data. (Note of the Author: I am aware the training set would benefit from a larger data set, unfortunately I had to decrease the training populationdue to performance issues with my current hardware configuration...)
+The "clean" training set is split: 60% of the rows will be used to train the model, the remaining 40% to validate and estimate the error rate of the prediction model before applying it to the test data. 
 
 
 ```r
-training <- train2[createDataPartition(train2$classe, p = 0.60, list = FALSE), ]
-cv <- train2[-createDataPartition(train2$classe, p = 0.40, list = FALSE), ]
+partition <- createDataPartition(train2$classe, p = 0.60, list = FALSE)
+training <- train2[partition, ]
+cv <- train2[-partition, ]
 ```
 
 ## Training Model(s)
 
-Afterwards two prediction models are generated based on the "cleaned"" training data frame using respectively Stochastic Gradient Boosting and Random Forest with 4-folds without repetition (Note: again I had to partially sacrifice accuracy to obtain "acceptable" elaboration times...) 
+Afterwards two prediction models are generated based on the "cleaned"" training data frame using respectively Stochastic Gradient Boosting and Random Forest.
 
 
 ```r
 modfitgbm <- train(classe ~ ., data = training, method="gbm", 
-                   trControl = trainControl(method="cv", number=4), 
+                   trControl = trainControl(method="repeatedcv", repeats=3, number=4), 
                    verbose=FALSE)
 ```
 
@@ -148,48 +149,12 @@ modfitgbm <- train(classe ~ ., data = training, method="gbm",
 
 ```r
 modfitrf <- train(classe ~ ., data = training, method="rf",
-                  trControl=trainControl(method="cv", number=4))
+                  trControl=trainControl(method="repeatedcv", repeats=3, number=4))
 ```
 
-Below the confusion matrixes, respectively, for the training and cross-validation sets: 
+## Extimation of o.o.s. error rate
 
-```r
-confusionMatrix(predict(modfitgbm, training), training$classe)
-```
-
-```
-## Confusion Matrix and Statistics
-## 
-##           Reference
-## Prediction    A    B    C    D    E
-##          A 3318   54    0    1    5
-##          B   19 2189   48    4    6
-##          C    6   34 1988   49   20
-##          D    5    1   17 1870   16
-##          E    0    1    1    6 2118
-## 
-## Overall Statistics
-##                                           
-##                Accuracy : 0.9751          
-##                  95% CI : (0.9721, 0.9779)
-##     No Information Rate : 0.2843          
-##     P-Value [Acc > NIR] : < 2.2e-16       
-##                                           
-##                   Kappa : 0.9685          
-##  Mcnemar's Test P-Value : 3.871e-12       
-## 
-## Statistics by Class:
-## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9910   0.9605   0.9679   0.9689   0.9783
-## Specificity            0.9929   0.9919   0.9888   0.9960   0.9992
-## Pos Pred Value         0.9822   0.9660   0.9480   0.9796   0.9962
-## Neg Pred Value         0.9964   0.9905   0.9932   0.9939   0.9951
-## Prevalence             0.2843   0.1935   0.1744   0.1639   0.1838
-## Detection Rate         0.2818   0.1859   0.1688   0.1588   0.1799
-## Detection Prevalence   0.2869   0.1924   0.1781   0.1621   0.1805
-## Balanced Accuracy      0.9920   0.9762   0.9783   0.9825   0.9887
-```
+Let's quantify the accuracy of the prediction using the cv set respectively for GBM and RF: 
 
 ```r
 confusionMatrix(predict(modfitgbm, cv), cv$classe)
@@ -200,71 +165,33 @@ confusionMatrix(predict(modfitgbm, cv), cv$classe)
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 3310   61    0    2    5
-##          B   21 2162   55    4   17
-##          C    9   51 1974   54   21
-##          D    6    1   19 1863   23
-##          E    2    3    5    6 2098
+##          A 2187   51    0    0    2
+##          B   22 1413   45    5   19
+##          C   10   46 1305   41   12
+##          D    5    1   15 1227   18
+##          E    8    7    3   13 1391
 ## 
 ## Overall Statistics
 ##                                           
-##                Accuracy : 0.969           
-##                  95% CI : (0.9657, 0.9721)
-##     No Information Rate : 0.2844          
+##                Accuracy : 0.9588          
+##                  95% CI : (0.9542, 0.9631)
+##     No Information Rate : 0.2845          
 ##     P-Value [Acc > NIR] : < 2.2e-16       
 ##                                           
-##                   Kappa : 0.9608          
-##  Mcnemar's Test P-Value : 4.71e-13        
+##                   Kappa : 0.9479          
+##  Mcnemar's Test P-Value : 1.575e-08       
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9886   0.9491   0.9615   0.9658   0.9695
-## Specificity            0.9919   0.9898   0.9861   0.9950   0.9983
-## Pos Pred Value         0.9799   0.9571   0.9360   0.9744   0.9924
-## Neg Pred Value         0.9955   0.9878   0.9918   0.9933   0.9932
-## Prevalence             0.2844   0.1935   0.1744   0.1639   0.1838
-## Detection Rate         0.2812   0.1837   0.1677   0.1583   0.1782
-## Detection Prevalence   0.2870   0.1919   0.1792   0.1624   0.1796
-## Balanced Accuracy      0.9903   0.9694   0.9738   0.9804   0.9839
-```
-
-```r
-confusionMatrix(predict(modfitrf, training), training$classe)
-```
-
-```
-## Confusion Matrix and Statistics
-## 
-##           Reference
-## Prediction    A    B    C    D    E
-##          A 3348    0    0    0    0
-##          B    0 2279    0    0    0
-##          C    0    0 2054    0    0
-##          D    0    0    0 1930    0
-##          E    0    0    0    0 2165
-## 
-## Overall Statistics
-##                                      
-##                Accuracy : 1          
-##                  95% CI : (0.9997, 1)
-##     No Information Rate : 0.2843     
-##     P-Value [Acc > NIR] : < 2.2e-16  
-##                                      
-##                   Kappa : 1          
-##  Mcnemar's Test P-Value : NA         
-## 
-## Statistics by Class:
-## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            1.0000   1.0000   1.0000   1.0000   1.0000
-## Specificity            1.0000   1.0000   1.0000   1.0000   1.0000
-## Pos Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
-## Neg Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
-## Prevalence             0.2843   0.1935   0.1744   0.1639   0.1838
-## Detection Rate         0.2843   0.1935   0.1744   0.1639   0.1838
-## Detection Prevalence   0.2843   0.1935   0.1744   0.1639   0.1838
-## Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000
+## Sensitivity            0.9798   0.9308   0.9539   0.9541   0.9646
+## Specificity            0.9906   0.9856   0.9832   0.9941   0.9952
+## Pos Pred Value         0.9763   0.9395   0.9229   0.9692   0.9782
+## Neg Pred Value         0.9920   0.9834   0.9902   0.9910   0.9921
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2787   0.1801   0.1663   0.1564   0.1773
+## Detection Prevalence   0.2855   0.1917   0.1802   0.1614   0.1812
+## Balanced Accuracy      0.9852   0.9582   0.9686   0.9741   0.9799
 ```
 
 ```r
@@ -276,40 +203,40 @@ confusionMatrix(predict(modfitrf, cv), cv$classe)
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 3346    9    0    0    0
-##          B    1 2261    5    0    0
-##          C    1    8 2045    9    1
-##          D    0    0    3 1918    2
-##          E    0    0    0    2 2161
+##          A 2232   10    2    0    0
+##          B    0 1497   10    0    0
+##          C    0   11 1353   29    0
+##          D    0    0    3 1254    1
+##          E    0    0    0    3 1441
 ## 
 ## Overall Statistics
 ##                                           
-##                Accuracy : 0.9965          
-##                  95% CI : (0.9953, 0.9975)
-##     No Information Rate : 0.2844          
+##                Accuracy : 0.9912          
+##                  95% CI : (0.9889, 0.9932)
+##     No Information Rate : 0.2845          
 ##     P-Value [Acc > NIR] : < 2.2e-16       
 ##                                           
-##                   Kappa : 0.9956          
+##                   Kappa : 0.9889          
 ##  Mcnemar's Test P-Value : NA              
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9994   0.9925   0.9961   0.9943   0.9986
-## Specificity            0.9989   0.9994   0.9980   0.9995   0.9998
-## Pos Pred Value         0.9973   0.9974   0.9908   0.9974   0.9991
-## Neg Pred Value         0.9998   0.9982   0.9992   0.9989   0.9997
-## Prevalence             0.2844   0.1935   0.1744   0.1639   0.1838
-## Detection Rate         0.2842   0.1921   0.1737   0.1629   0.1836
-## Detection Prevalence   0.2850   0.1926   0.1753   0.1634   0.1837
-## Balanced Accuracy      0.9992   0.9960   0.9971   0.9969   0.9992
+## Sensitivity            1.0000   0.9862   0.9890   0.9751   0.9993
+## Specificity            0.9979   0.9984   0.9938   0.9994   0.9995
+## Pos Pred Value         0.9947   0.9934   0.9713   0.9968   0.9979
+## Neg Pred Value         1.0000   0.9967   0.9977   0.9951   0.9998
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2845   0.1908   0.1724   0.1598   0.1837
+## Detection Prevalence   0.2860   0.1921   0.1775   0.1603   0.1840
+## Balanced Accuracy      0.9989   0.9923   0.9914   0.9873   0.9994
 ```
 
-With the latest versions of the above mentioned R libraries, Random Forest provides more accurate results.
+The accuracy of the two models is quite close however Random Forest provides even more accurate predictions. The accuracy rate is close to 99.12% therefore I expect the out of sample error rate to be around 0.9% and the predictions to be fairly accurate even using the test data.
 
-## Prediction
+## Predicted values
 
-Applying the Random Forest model to the test data:
+Applying the Random Forest model to the test data, we obtain the following predicted values for "classe":
 
 ```r
 predict(modfitrf, test2)
